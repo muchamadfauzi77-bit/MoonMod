@@ -22,10 +22,10 @@ namespace MoonMod
     public partial class MoonMod : Script
     {
         // ERROR SCREEN STATE - POS LOADING FAILURE
-        private bool _routeLoadingErrorDisplayActive = false;
-        private int _routeLoadingErrorDisplayStartTime = 0;
-        private const int ROUTE_LOADING_ERROR_DISPLAY_MS = 3000; // 3 detik
-        private const float ROUTE_LOADING_ERROR_TEXT_SCALE = 2.5f; // Much bigger text
+        private bool _posLoadingFailed = false;
+        private int _posFailureStartTime = 0;
+        private int _posFailureCountdown = 3; // 3 seconds countdown
+        private const int POS_FAILURE_DISPLAY_DURATION_MS = 3000; // 3 seconds total
 
         private void OnHardwareBlockedTick(object sender, EventArgs e)
         {
@@ -111,73 +111,52 @@ namespace MoonMod
             }
         }
 
-        private void DrawRouteLoadingErrorScreen(int currentTime)
+        private void DrawPosFailureScreen()
         {
-            if (!_routeLoadingErrorDisplayActive)
-                return;
-
-            // Check if 3 seconds have passed
-            int elapsed = currentTime - _routeLoadingErrorDisplayStartTime;
-            if (elapsed >= ROUTE_LOADING_ERROR_DISPLAY_MS)
-            {
-                _routeLoadingErrorDisplayActive = false;
-                return;
-            }
-
-            // Hide GTA HUD completely
+            // Hide all GTA UI
             Function.Call(Hash.HIDE_HUD_AND_RADAR_THIS_FRAME);
 
-            // Draw full black overlay
+            // Full black background
             Function.Call(
                 Hash.DRAW_RECT,
-                0.5f,
-                0.5f,
-                1.0f,
-                1.0f,
-                0,
-                0,
-                0,
-                255
+                0.5f, 0.5f,
+                1.0f, 1.0f,
+                0, 0, 0, 255
             );
 
-            // Draw large semi-transparent black box in center
-            Function.Call(
-                Hash.DRAW_RECT,
-                0.5f,      // center X
-                0.5f,      // center Y
-                0.6f,      // width (bigger)
-                0.4f,      // height (bigger)
-                0,         // R
-                0,         // G
-                0,         // B
-                200        // Alpha (more visible)
-            );
-
-            // Draw red border
-            Function.Call(
-                Hash.DRAW_RECT,
-                0.5f,
-                0.5f,
-                0.615f,
-                0.415f,
-                255,       // R - Red
-                50,        // G
-                50,        // B
-                255        // Alpha (full opacity for border)
-            );
-
-            // Set up text rendering - BIGGER AND BOLDER
-            Function.Call(Hash.SET_TEXT_FONT, 4); // Different font for better visibility
-            Function.Call(Hash.SET_TEXT_SCALE, ROUTE_LOADING_ERROR_TEXT_SCALE, ROUTE_LOADING_ERROR_TEXT_SCALE);
-            Function.Call(Hash.SET_TEXT_COLOUR, 255, 100, 100, 255); // Light red
+            // Main error message - BIG AND CENTERED
+            Function.Call(Hash.SET_TEXT_FONT, 7);
+            Function.Call(Hash.SET_TEXT_SCALE, 2.0f, 2.0f);
+            Function.Call(Hash.SET_TEXT_COLOUR, 255, 100, 100, 255);
             Function.Call(Hash.SET_TEXT_CENTRE, true);
-            Function.Call(Hash.SET_TEXT_EDGE, 6, 0, 0, 0, 255); // Thick edge outline
-            Function.Call(Hash.SET_TEXT_WRAP, 0.05f, 0.95f);
+            Function.Call(Hash.SET_TEXT_EDGE, 6, 0, 0, 0, 255);
+            Function.Call(Hash.SET_TEXT_WRAP, 0.1f, 0.9f);
 
-            // Draw the error message
             Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "STRING");
-            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "POS GAGAL MEMUAT~n~AKAN DI ULANG KEMBALI");
-            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.48f);
+            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "POS GAGAL MEMUAT");
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.4f);
+
+            // Countdown below - LARGE NUMBERS
+            Function.Call(Hash.SET_TEXT_FONT, 7);
+            Function.Call(Hash.SET_TEXT_SCALE, 3.0f, 3.0f);
+            Function.Call(Hash.SET_TEXT_COLOUR, 255, 150, 150, 255);
+            Function.Call(Hash.SET_TEXT_CENTRE, true);
+            Function.Call(Hash.SET_TEXT_EDGE, 8, 0, 0, 0, 255);
+
+            Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "STRING");
+            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, _posFailureCountdown.ToString());
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.55f);
+
+            // "AKAN DI ULANG KEMBALI" - subtitle
+            Function.Call(Hash.SET_TEXT_FONT, 4);
+            Function.Call(Hash.SET_TEXT_SCALE, 1.5f, 1.5f);
+            Function.Call(Hash.SET_TEXT_COLOUR, 200, 100, 100, 255);
+            Function.Call(Hash.SET_TEXT_CENTRE, true);
+            Function.Call(Hash.SET_TEXT_EDGE, 4, 0, 0, 0, 255);
+
+            Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "STRING");
+            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "AKAN DI ULANG KEMBALI");
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.65f);
         }
 
         public MoonMod()
@@ -357,27 +336,27 @@ namespace MoonMod
             Aborted += OnAborted;
         }
 
-        private void RestartToGameplaySelection()
+        private void ReturnToGameplaySelectionMenu()
         {
-            // Reset gameplay state and return to mode selection menu
+            // Reset to gameplay selection
             _selectedGameplayMode = MoonGameplayMode.None;
-            _selectedGameplayPosCount = 0;
             _startupUiStage = StartupUiStage.Gameplay;
-            _gameplaySelectionLocked = false;
-            _selectedDifficultyMode = MoonDifficultyMode.None;
             
-            // Clear route data
+            // Reset route data
             _activePosList.Clear();
             _activeFinishPosition = Vector3.Zero;
             _currentPosIndex = 0;
-            ClearRouteBlipsOnly();
-            ResetIncrementalRouteBuildState();
             
-            // Unfreeze player
+            // Reset error state
+            _posLoadingFailed = false;
+            _posFailureStartTime = 0;
+            _posFailureCountdown = 3;
+            
+            // Unfreeze player and return to normal time
             SetStartupLoadingProtection(false);
             Function.Call(Hash.SET_TIME_SCALE, 1.0f);
             
-            // Switch back to startup UI
+            // Switch back to startup menu
             Tick -= OnStartupLoadingTick;
             Tick += OnStartupNameTick;
         }
@@ -386,27 +365,43 @@ namespace MoonMod
         {
             try
             {
-                // Draw normal loading screen first if no error
-                if (!_routeLoadingErrorDisplayActive)
+                // If POS failure is active, show error screen and countdown
+                if (_posLoadingFailed)
                 {
-                    ProcessStartupLoadingScreen();
-                }
-                else
-                {
-                    // If error is active, SKIP ProcessStartupLoadingScreen and draw error directly
-                    Function.Call(Hash.HIDE_HUD_AND_RADAR_THIS_FRAME);
+                    DrawPosFailureScreen();
+                    SetStartupLoadingProtection(true);
+
+                    int elapsedMs = Game.GameTime - _posFailureStartTime;
+                    
+                    // Update countdown: 3, 2, 1, then return to menu
+                    if (elapsedMs < 1000)
+                    {
+                        _posFailureCountdown = 3;
+                    }
+                    else if (elapsedMs < 2000)
+                    {
+                        _posFailureCountdown = 2;
+                    }
+                    else if (elapsedMs < 3000)
+                    {
+                        _posFailureCountdown = 1;
+                    }
+                    else
+                    {
+                        // After 3 seconds, return to gameplay menu
+                        ReturnToGameplaySelectionMenu();
+                    }
+                    return;
                 }
 
-                // Draw error screen ON TOP (will cover the loading screen)
-                DrawRouteLoadingErrorScreen(Game.GameTime);
-
+                // Normal loading screen
+                ProcessStartupLoadingScreen();
                 SetStartupLoadingProtection(true);
 
                 int currentTime = Game.GameTime;
                 int wallTime = Environment.TickCount;
 
                 // Hanya jalankan pekerjaan yang dibutuhkan untuk menyiapkan gameplay.
-                // Jangan jalankan seluruh OnTick sebelum route selesai.
                 ProcessInitialRouteSetup();
                 ProcessPendingRouteGeneration(currentTime);
 
@@ -414,29 +409,15 @@ namespace MoonMod
                 {
                     _startupRouteReadySince = 0;
 
-                    // Failsafe startup: jika GoToMountain POS belum siap sampai
-                    // MaxWaitMs, jangan buka gameplay dengan route yang masih pending.
-                    // Tampilkan error message terlebih dahulu, lalu kembali ke menu.
+                    // Failsafe startup: jika POS belum siap sampai MaxWaitMs
                     int elapsed = unchecked(wallTime - _startupLoadingStartTime);
                     if (elapsed >= Math.Max(5000, _startupLoadingMaxWaitMs))
                     {
-                        // Show error screen
-                        if (!_routeLoadingErrorDisplayActive)
-                        {
-                            _routeLoadingErrorDisplayActive = true;
-                            _routeLoadingErrorDisplayStartTime = Game.GameTime;
-                        }
-
-                        // Wait 3 seconds, then return to gameplay menu
-                        if (_routeLoadingErrorDisplayActive)
-                        {
-                            int errorDisplayElapsed = Game.GameTime - _routeLoadingErrorDisplayStartTime;
-                            if (errorDisplayElapsed >= ROUTE_LOADING_ERROR_DISPLAY_MS)
-                            {
-                                _routeLoadingErrorDisplayActive = false;
-                                RestartToGameplaySelection();
-                            }
-                        }
+                        // POS FAILED - trigger error screen
+                        _posLoadingFailed = true;
+                        _posFailureStartTime = Game.GameTime;
+                        _posFailureCountdown = 3;
+                        return;
                     }
                     return;
                 }
@@ -465,9 +446,6 @@ namespace MoonMod
             {
                 LogError("STARTUP LOADING ERROR", ex);
 
-                // FAIL-OPEN: startup loading tidak boleh mengunci layar hitam.
-                // Jika generator route melempar exception, buka gameplay utama
-                // dan biarkan OnTick melanjutkan retry route secara incremental.
                 try
                 {
                     ResetIncrementalRouteBuildState();
