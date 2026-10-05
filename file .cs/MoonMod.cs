@@ -25,7 +25,7 @@ namespace MoonMod
         private bool _routeLoadingErrorDisplayActive = false;
         private int _routeLoadingErrorDisplayStartTime = 0;
         private const int ROUTE_LOADING_ERROR_DISPLAY_MS = 3000; // 3 detik
-        private const float ROUTE_LOADING_ERROR_TEXT_SCALE = 1.8f; // Bigger text
+        private const float ROUTE_LOADING_ERROR_TEXT_SCALE = 2.5f; // Much bigger text
 
         private void OnHardwareBlockedTick(object sender, EventArgs e)
         {
@@ -127,7 +127,7 @@ namespace MoonMod
             // Hide GTA HUD completely
             Function.Call(Hash.HIDE_HUD_AND_RADAR_THIS_FRAME);
 
-            // Draw full black overlay first
+            // Draw full black overlay
             Function.Call(
                 Hash.DRAW_RECT,
                 0.5f,
@@ -140,67 +140,44 @@ namespace MoonMod
                 255
             );
 
-            // Draw large black box in center of screen
-            // Position: center X (0.5), center Y (0.5)
-            // Size: 0.5 wide, 0.35 tall (large box)
+            // Draw large semi-transparent black box in center
             Function.Call(
                 Hash.DRAW_RECT,
                 0.5f,      // center X
                 0.5f,      // center Y
-                0.5f,      // width
-                0.35f,     // height
+                0.6f,      // width (bigger)
+                0.4f,      // height (bigger)
                 0,         // R
                 0,         // G
                 0,         // B
-                220        // Alpha (slightly transparent black)
+                200        // Alpha (more visible)
             );
 
-            // Draw border/glow effect with red color
+            // Draw red border
             Function.Call(
                 Hash.DRAW_RECT,
-                0.5f,      // center X
-                0.5f,      // center Y
-                0.505f,    // width (slightly bigger for border effect)
-                0.355f,    // height (slightly bigger for border effect)
+                0.5f,
+                0.5f,
+                0.615f,
+                0.415f,
                 255,       // R - Red
                 50,        // G
                 50,        // B
-                200        // Alpha
+                255        // Alpha (full opacity for border)
             );
 
-            // Set up text rendering
-            Function.Call(Hash.SET_TEXT_FONT, 7);
+            // Set up text rendering - BIGGER AND BOLDER
+            Function.Call(Hash.SET_TEXT_FONT, 4); // Different font for better visibility
             Function.Call(Hash.SET_TEXT_SCALE, ROUTE_LOADING_ERROR_TEXT_SCALE, ROUTE_LOADING_ERROR_TEXT_SCALE);
-            Function.Call(Hash.SET_TEXT_COLOUR, 255, 100, 100, 255); // Light red color
+            Function.Call(Hash.SET_TEXT_COLOUR, 255, 100, 100, 255); // Light red
             Function.Call(Hash.SET_TEXT_CENTRE, true);
-            Function.Call(Hash.SET_TEXT_EDGE, 4, 0, 0, 0, 255); // Thick edge for visibility
-            Function.Call(Hash.SET_TEXT_WRAP, 0.1f, 0.9f); // Wrap text within bounds
+            Function.Call(Hash.SET_TEXT_EDGE, 6, 0, 0, 0, 255); // Thick edge outline
+            Function.Call(Hash.SET_TEXT_WRAP, 0.05f, 0.95f);
 
             // Draw the error message
             Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "STRING");
             Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "POS GAGAL MEMUAT~n~AKAN DI ULANG KEMBALI");
-            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.45f); // Centered position
-
-            // Optional: Add pulsing effect by changing alpha based on elapsed time
-            if (elapsed > ROUTE_LOADING_ERROR_DISPLAY_MS - 500) // Last 500ms, pulse faster
-            {
-                int pulse = (elapsed / 100) % 2;
-                if (pulse == 0)
-                {
-                    // Draw additional pulsing box for emphasis
-                    Function.Call(
-                        Hash.DRAW_RECT,
-                        0.5f,
-                        0.5f,
-                        0.51f,
-                        0.36f,
-                        255,
-                        100,
-                        100,
-                        100
-                    );
-                }
-            }
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.48f);
         }
 
         public MoonMod()
@@ -409,13 +386,20 @@ namespace MoonMod
         {
             try
             {
-                // Draw error screen if active
+                // Draw normal loading screen first if no error
+                if (!_routeLoadingErrorDisplayActive)
+                {
+                    ProcessStartupLoadingScreen();
+                }
+                else
+                {
+                    // If error is active, SKIP ProcessStartupLoadingScreen and draw error directly
+                    Function.Call(Hash.HIDE_HUD_AND_RADAR_THIS_FRAME);
+                }
+
+                // Draw error screen ON TOP (will cover the loading screen)
                 DrawRouteLoadingErrorScreen(Game.GameTime);
 
-                // Selalu gambar black screen dahulu supaya frame setup GTA tidak pernah terlihat.
-                // ProcessStartupLoadingScreen menjaga TimeScale=1 selama fase ini:
-                // world/path streaming jalan, tetapi player tetap tidak dapat bergerak.
-                ProcessStartupLoadingScreen();
                 SetStartupLoadingProtection(true);
 
                 int currentTime = Game.GameTime;
