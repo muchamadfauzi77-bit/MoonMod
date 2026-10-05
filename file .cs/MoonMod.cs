@@ -25,7 +25,7 @@ namespace MoonMod
         private bool _routeLoadingErrorDisplayActive = false;
         private int _routeLoadingErrorDisplayStartTime = 0;
         private const int ROUTE_LOADING_ERROR_DISPLAY_MS = 3000; // 3 detik
-        private const int ROUTE_LOADING_ERROR_MESSAGE_SCALE = 1;
+        private const float ROUTE_LOADING_ERROR_TEXT_SCALE = 1.8f; // Bigger text
 
         private void OnHardwareBlockedTick(object sender, EventArgs e)
         {
@@ -124,7 +124,10 @@ namespace MoonMod
                 return;
             }
 
-            // Draw black overlay
+            // Hide GTA HUD completely
+            Function.Call(Hash.HIDE_HUD_AND_RADAR_THIS_FRAME);
+
+            // Draw full black overlay first
             Function.Call(
                 Hash.DRAW_RECT,
                 0.5f,
@@ -137,16 +140,67 @@ namespace MoonMod
                 255
             );
 
-            // Draw error message text in center
+            // Draw large black box in center of screen
+            // Position: center X (0.5), center Y (0.5)
+            // Size: 0.5 wide, 0.35 tall (large box)
+            Function.Call(
+                Hash.DRAW_RECT,
+                0.5f,      // center X
+                0.5f,      // center Y
+                0.5f,      // width
+                0.35f,     // height
+                0,         // R
+                0,         // G
+                0,         // B
+                220        // Alpha (slightly transparent black)
+            );
+
+            // Draw border/glow effect with red color
+            Function.Call(
+                Hash.DRAW_RECT,
+                0.5f,      // center X
+                0.5f,      // center Y
+                0.505f,    // width (slightly bigger for border effect)
+                0.355f,    // height (slightly bigger for border effect)
+                255,       // R - Red
+                50,        // G
+                50,        // B
+                200        // Alpha
+            );
+
+            // Set up text rendering
             Function.Call(Hash.SET_TEXT_FONT, 7);
-            Function.Call(Hash.SET_TEXT_SCALE, ROUTE_LOADING_ERROR_MESSAGE_SCALE, ROUTE_LOADING_ERROR_MESSAGE_SCALE);
-            Function.Call(Hash.SET_TEXT_COLOUR, 255, 100, 100, 255); // Red-ish color
+            Function.Call(Hash.SET_TEXT_SCALE, ROUTE_LOADING_ERROR_TEXT_SCALE, ROUTE_LOADING_ERROR_TEXT_SCALE);
+            Function.Call(Hash.SET_TEXT_COLOUR, 255, 100, 100, 255); // Light red color
             Function.Call(Hash.SET_TEXT_CENTRE, true);
-            Function.Call(Hash.SET_TEXT_EDGE, 2, 0, 0, 0, 255);
-            Function.Call(Hash.SET_TEXT_WRAP, 0.0f, 1.0f);
+            Function.Call(Hash.SET_TEXT_EDGE, 4, 0, 0, 0, 255); // Thick edge for visibility
+            Function.Call(Hash.SET_TEXT_WRAP, 0.1f, 0.9f); // Wrap text within bounds
+
+            // Draw the error message
             Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "STRING");
-            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "POS GAGAL MEMUAT,~n~AKAN DI ULANG KEMBALI");
-            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.4f);
+            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "POS GAGAL MEMUAT~n~AKAN DI ULANG KEMBALI");
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.45f); // Centered position
+
+            // Optional: Add pulsing effect by changing alpha based on elapsed time
+            if (elapsed > ROUTE_LOADING_ERROR_DISPLAY_MS - 500) // Last 500ms, pulse faster
+            {
+                int pulse = (elapsed / 100) % 2;
+                if (pulse == 0)
+                {
+                    // Draw additional pulsing box for emphasis
+                    Function.Call(
+                        Hash.DRAW_RECT,
+                        0.5f,
+                        0.5f,
+                        0.51f,
+                        0.36f,
+                        255,
+                        100,
+                        100,
+                        100
+                    );
+                }
+            }
         }
 
         public MoonMod()
