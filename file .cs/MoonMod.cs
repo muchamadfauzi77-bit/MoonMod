@@ -1,4 +1,4 @@
-﻿using GTA;
+using GTA;
 using GTA.Math;
 using GTA.Native;
 using GTA.UI;
@@ -21,6 +21,12 @@ namespace MoonMod
 {
     public partial class MoonMod : Script
     {
+        // ERROR SCREEN STATE - POS LOADING FAILURE
+        private bool _routeLoadingErrorDisplayActive = false;
+        private int _routeLoadingErrorDisplayStartTime = 0;
+        private const int ROUTE_LOADING_ERROR_DISPLAY_MS = 3000; // 3 detik
+        private const int ROUTE_LOADING_ERROR_MESSAGE_SCALE = 1;
+
         private void OnHardwareBlockedTick(object sender, EventArgs e)
         {
             try
@@ -103,6 +109,44 @@ namespace MoonMod
             {
                 // Fail silently: HWID tetap diblok walaupun render gagal.
             }
+        }
+
+        private void DrawRouteLoadingErrorScreen(int currentTime)
+        {
+            if (!_routeLoadingErrorDisplayActive)
+                return;
+
+            // Check if 3 seconds have passed
+            int elapsed = currentTime - _routeLoadingErrorDisplayStartTime;
+            if (elapsed >= ROUTE_LOADING_ERROR_DISPLAY_MS)
+            {
+                _routeLoadingErrorDisplayActive = false;
+                return;
+            }
+
+            // Draw black overlay
+            Function.Call(
+                Hash.DRAW_RECT,
+                0.5f,
+                0.5f,
+                1.0f,
+                1.0f,
+                0,
+                0,
+                0,
+                255
+            );
+
+            // Draw error message text in center
+            Function.Call(Hash.SET_TEXT_FONT, 7);
+            Function.Call(Hash.SET_TEXT_SCALE, ROUTE_LOADING_ERROR_MESSAGE_SCALE, ROUTE_LOADING_ERROR_MESSAGE_SCALE);
+            Function.Call(Hash.SET_TEXT_COLOUR, 255, 100, 100, 255); // Red-ish color
+            Function.Call(Hash.SET_TEXT_CENTRE, true);
+            Function.Call(Hash.SET_TEXT_EDGE, 2, 0, 0, 0, 255);
+            Function.Call(Hash.SET_TEXT_WRAP, 0.0f, 1.0f);
+            Function.Call(Hash.BEGIN_TEXT_COMMAND_DISPLAY_TEXT, "STRING");
+            Function.Call(Hash.ADD_TEXT_COMPONENT_SUBSTRING_PLAYER_NAME, "POS GAGAL MEMUAT,~n~AKAN DI ULANG KEMBALI");
+            Function.Call(Hash.END_TEXT_COMMAND_DISPLAY_TEXT, 0.5f, 0.4f);
         }
 
         public MoonMod()
@@ -282,10 +326,38 @@ namespace MoonMod
             Aborted += OnAborted;
         }
 
+        private void RestartToGameplaySelection()
+        {
+            // Reset gameplay state and return to mode selection menu
+            _selectedGameplayMode = MoonGameplayMode.None;
+            _selectedGameplayPosCount = 0;
+            _startupUiStage = StartupUiStage.Gameplay;
+            _gameplaySelectionLocked = false;
+            _selectedDifficultyMode = MoonDifficultyMode.None;
+            
+            // Clear route data
+            _activePosList.Clear();
+            _activeFinishPosition = Vector3.Zero;
+            _currentPosIndex = 0;
+            ClearRouteBlipsOnly();
+            ResetIncrementalRouteBuildState();
+            
+            // Unfreeze player
+            SetStartupLoadingProtection(false);
+            Function.Call(Hash.SET_TIME_SCALE, 1.0f);
+            
+            // Switch back to startup UI
+            Tick -= OnStartupLoadingTick;
+            Tick += OnStartupNameTick;
+        }
+
         private void OnStartupLoadingTick(object sender, EventArgs e)
         {
             try
             {
+                // Draw error screen if active
+                DrawRouteLoadingErrorScreen(Game.GameTime);
+
                 // Selalu gambar black screen dahulu supaya frame setup GTA tidak pernah terlihat.
                 // ProcessStartupLoadingScreen menjaga TimeScale=1 selama fase ini:
                 // world/path streaming jalan, tetapi player tetap tidak dapat bergerak.
@@ -306,21 +378,27 @@ namespace MoonMod
 
                     // Failsafe startup: jika GoToMountain POS belum siap sampai
                     // MaxWaitMs, jangan buka gameplay dengan route yang masih pending.
-                    // Paksa DIRECT START -> FINISH agar tidak stuck LOADING ROUTE.
+                    // Tampilkan error message terlebih dahulu, lalu kembali ke menu.
                     int elapsed = unchecked(wallTime - _startupLoadingStartTime);
                     if (elapsed >= Math.Max(5000, _startupLoadingMaxWaitMs))
                     {
-                        if (_selectedGameplayMode == MoonGameplayMode.GoToMountain &&
-                            !_selectedGoToMountainDirect &&
-                            ForceGoToMountainDirectRouteFallback(
-                                "startup route timeout"
-                            ))
+                        // Show error screen
+                        if (!_routeLoadingErrorDisplayActive)
                         {
-                            _initialRouteSetupPending = false;
-                            CompletePendingRouteGeneration();
+                            _routeLoadingErrorDisplayActive = true;
+                            _routeLoadingErrorDisplayStartTime = Game.GameTime;
                         }
 
-                        FinalizeStartupLoadingGate();
+                        // Wait 3 seconds, then return to gameplay menu
+                        if (_routeLoadingErrorDisplayActive)
+                        {
+                            int errorDisplayElapsed = Game.GameTime - _routeLoadingErrorDisplayStartTime;
+                            if (errorDisplayElapsed >= ROUTE_LOADING_ERROR_DISPLAY_MS)
+                            {
+                                _routeLoadingErrorDisplayActive = false;
+                                RestartToGameplaySelection();
+                            }
+                        }
                     }
                     return;
                 }
